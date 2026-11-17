@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medicine &amp; Health Reminder</title>
+<!--
+  Medicine & Health Reminder (single file, no installs, no server).
+  Data lives in this browser (localStorage). Use "Export backup" to save it.
+  The backup format matches the Python version (reminders.json), so you can move data between them.
+  Personal organiser only, not medical advice.
+-->
+<style>
+  :root{
+    --bg:#f4f7f8; --card:#ffffff; --ink:#15232b; --muted:#5b6d78; --line:#dce5e9;
+    --accent:#0f766e; --accent-ink:#ffffff; --chip:#e3f3f0;
+    --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --shadow:0 1px 2px rgba(15,35,43,.06),0 4px 14px rgba(15,35,43,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0d1418; --card:#162026; --ink:#e6eef1; --muted:#9db2bc; --line:#263640;
+      --accent:#2dd4bf; --accent-ink:#04211d; --chip:#12332f;
+      --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --shadow:none;
+    }
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:0 16px 48px}
+  header{padding:20px 0 8px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+  h1{font-size:1.35rem;margin:0;letter-spacing:-.01em}
+  h2{font-size:1.1rem;margin:20px 0 10px}
+  h3{margin:0 0 8px;font-size:1.05rem}
+  .clock{font-variant-numeric:tabular-nums;color:var(--muted);font-size:.95rem}
+  .hint{color:var(--muted);font-size:.88rem;margin:0 0 12px}
+  .tabs{display:flex;gap:6px;overflow-x:auto;padding:4px 0 12px;border-bottom:1px solid var(--line);margin-bottom:8px}
+  .tab{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:999px;font:inherit;font-size:.95rem;cursor:pointer;white-space:nowrap}
+  .tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);margin-bottom:10px}
+  .row{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center}
+  .time{font-weight:700;font-variant-numeric:tabular-nums;font-size:1.05rem}
+  .name{font-weight:600}
+  .sub{color:var(--muted);font-size:.88rem}
+  .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:10px;font:inherit;font-size:.92rem;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  .btn.danger{color:var(--bad)}
+  .btn.small{padding:5px 10px;font-size:.85rem}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.78rem;font-weight:600;border:1px solid var(--line);color:var(--muted)}
+  .b-taken{color:var(--ok);border-color:var(--ok)}
+  .b-pending{color:var(--warn);border-color:var(--warn)}
+  .b-missed,.b-low{color:var(--bad);border-color:var(--bad)}
+  .b-kind{background:var(--chip);color:var(--accent);border-color:transparent}
+  .summary{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px}
+  .empty{text-align:center;color:var(--muted);padding:28px 12px}
+  form.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field.full{grid-column:1/-1}
+  label,.lbl{font-size:.88rem;font-weight:600}
+  input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%}
+  input:focus,select:focus,textarea:focus,.btn:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .days{display:flex;gap:6px;flex-wrap:wrap}
+  .days label{display:flex;align-items:center;gap:5px;font-weight:500;border:1px solid var(--line);border-radius:999px;padding:5px 11px;cursor:pointer;background:var(--bg)}
+  .days input{width:auto;margin:0}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .chip{background:var(--chip);color:var(--accent);border-radius:999px;padding:3px 6px 3px 12px;font-size:.9rem;display:inline-flex;gap:6px;align-items:center}
+  .chip button{border:0;background:none;color:inherit;cursor:pointer;font-size:1rem;line-height:1;padding:2px 6px}
+  .inline{display:flex;gap:8px}
+  .inline .btn{white-space:nowrap}
+  .err{color:var(--bad);font-size:.9rem;min-height:1.3em;margin:0}
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:.82rem}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .bar{height:8px;background:var(--line);border-radius:99px;min-width:70px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  #overlay{position:fixed;inset:0;background:rgba(5,12,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+  .modal{background:var(--card);border-radius:16px;padding:20px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+  .modal .big{font-size:1.3rem;font-weight:700;margin:4px 0}
+  .mbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:16px}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:.92rem;max-width:90vw;z-index:20}
+  footer{color:var(--muted);font-size:.82rem;margin-top:28px}
+  .callout{border-left:4px solid var(--accent);background:var(--chip);padding:10px 12px;border-radius:8px;margin:10px 0;font-size:.92rem}
+  .callout.warn{border-color:var(--warn)}
+  .callout.bad{border-color:var(--bad)}
+  .emergency{border:2px solid var(--bad);background:var(--card);border-radius:14px;padding:16px;margin:12px 0}
+  .emergency h3{color:var(--bad);margin-top:0}
+  .sec h4{margin:16px 0 6px;font-size:.95rem}
+  .sec ul{margin:0;padding-left:20px}
+  .sec li{margin:3px 0}
+  .otc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
+  .otc.avoid{border-color:var(--bad)}
+  .otc.ask{border-color:var(--warn)}
+  .flag{font-size:.85rem;font-weight:600;margin-top:4px}
+  .flag.avoid{color:var(--bad)}
+  .flag.ask{color:var(--warn)}
+  .checks{display:flex;flex-wrap:wrap;gap:6px 16px}
+  .checks label{display:flex;gap:6px;align-items:center;font-weight:500}
+  .checks input{width:auto;margin:0}
+  textarea{resize:vertical}
+  @media (max-width:560px){
+    form.grid{grid-template-columns:1fr}
+    .row{grid-template-columns:52px 1fr}
+    .row .acts{grid-column:1/-1;justify-content:flex-start}
+  }
+</style>
+</head>
+<script src="https://medicod.netlify.app/medicino-sync.js" data-label="Medicino web"></script>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Medicine &amp; Health Reminder</h1>
+      <div class="clock" id="clock"></div>
+    </div>
+    <button class="btn" id="enable-btn" type="button">Enable alerts</button>
+  </header>
+  <p class="hint">Reminders only fire while this page is open in a browser tab. Data stays on this device.</p>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" data-tab="today">Today</button>
+    <button class="tab" role="tab" data-tab="list">All reminders</button>
+    <button class="tab" role="tab" data-tab="add">Add new</button>
+    <button class="tab" role="tab" data-tab="assistant">Health assistant</button>
+    <button class="tab" role="tab" data-tab="report">Report</button>
+  </nav>
+
+  <section class="panel" id="tab-today"></section>
+  <section class="panel" id="tab-list" hidden></section>
+
+  <section class="panel" id="tab-add" hidden>
+    <h2>Add a reminder</h2>
+    <form class="grid" id="add-form" novalidate>
+      <div class="field">
+        <label for="f-kind">Type</label>
+        <select id="f-kind">
+          <option value="medicine">Medicine</option>
+          <option value="health">Health habit</option>
+          <option value="appointment">Appointment</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-name">Name</label>
+        <input id="f-name" maxlength="60" placeholder="e.g. Metformin, Drink water, Dentist" autocomplete="off">
+      </div>
+
+      <div class="field" data-for="medicine">
+        <label for="f-dose">Dose</label>
+        <input id="f-dose" maxlength="40" placeholder="e.g. 1 tablet, 5 ml" value="1 tablet" autocomplete="off">
+      </div>
+      <div class="field" data-for="appointment">
+        <label for="f-on">Date</label>
+        <input id="f-on" type="date">
+      </div>
+
+      <div class="field full">
+        <span class="lbl" id="time-label">Times</span>
+        <div class="inline">
+          <input id="f-time" type="time" value="08:00" aria-labelledby="time-label">
+          <button class="btn" type="button" id="add-time" data-for="medicine health">Add time</button>
+        </div>
+        <div class="chips" id="chips" data-for="medicine health"></div>
+      </div>
+
+      <div class="field full" data-for="medicine health">
+        <span class="lbl">Days</span>
+        <div class="days" id="f-days"></div>
+      </div>
+
+      <div class="field" data-for="medicine health">
+        <label for="f-start">Start date</label>
+        <input id="f-start" type="date">
+      </div>
+      <div class="field" data-for="medicine health">
+        <label for="f-end">End date (optional)</label>
+        <input id="f-end" type="date">
+      </div>
+
+      <div class="field" data-for="medicine">
+        <label for="f-stock">Units in stock (optional)</label>
+        <input id="f-stock" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 30">
+      </div>
+      <div class="field" data-for="medicine">
+        <label for="f-perdose">Units used per dose</label>
+        <input id="f-perdose" type="number" min="1" step="1" inputmode="numeric" value="1">
+      </div>
+
+      <div class="field full">
+        <label for="f-notes">Notes (optional)</label>
+        <input id="f-notes" maxlength="120" placeholder="e.g. after food, bring insurance card" autocomplete="off">
+      </div>
+
+      <div class="field full">
+        <p class="err" id="f-error" role="alert"></p>
+        <div><button class="btn primary" type="submit">Save reminder</button></div>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" id="tab-assistant" hidden>
+    <h2>Health assistant</h2>
+    <div class="callout warn" role="note"><b>General information only.</b> This is not a diagnosis or a prescription, and it does not replace a doctor or pharmacist. In an emergency call your local emergency number (112 in India) right away.</div>
+    <form class="grid" id="assist-form" novalidate>
+      <div class="field full">
+        <label for="a-query">What is the problem or disease?</label>
+        <textarea id="a-query" rows="2" maxlength="300" placeholder="e.g. fever and headache, acidity, how to prevent dengue"></textarea>
+        <div class="chips" id="a-quick" aria-label="Common topics"></div>
+      </div>
+      <div class="field">
+        <label for="a-age">Who is this for?</label>
+        <select id="a-age">
+          <option value="adult" selected>Adult or teen (12 to 64)</option>
+          <option value="older">Older adult (65 or over)</option>
+          <option value="child">Child (1 to 11 years)</option>
+          <option value="infant">Baby (under 1 year)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="a-allergy">Medicine allergies (optional)</label>
+        <input id="a-allergy" maxlength="100" placeholder="e.g. ibuprofen, penicillin" autocomplete="off">
+      </div>
+      <div class="field full">
+        <span class="lbl">Conditions that affect which medicines are safe</span>
+        <div class="checks">
+          <label><input type="checkbox" class="a-flag" value="pregnant"> Pregnant or breastfeeding</label>
+          <label><input type="checkbox" class="a-flag" value="liver"> Liver disease</label>
+          <label><input type="checkbox" class="a-flag" value="kidney"> Kidney disease</label>
+          <label><input type="checkbox" class="a-flag" value="ulcer"> Stomach ulcer or gastritis</label>
+          <label><input type="checkbox" class="a-flag" value="asthma"> Asthma</label>
+          <label><input type="checkbox" class="a-flag" value="bp"> High blood pressure or heart disease</label>
+          <label><input type="checkbox" class="a-flag" value="diabetes"> Diabetes</label>
+          <label><input type="checkbox" class="a-flag" value="thinner"> Taking blood thinners</label>
+        </div>
+      </div>
+      <div class="field full">
+        <div class="checks"><label><input type="checkbox" id="a-meds"> Take my saved medicines into account (checks for duplicates). In AI mode their names are sent to the AI service.</label></div>
+      </div>
+      <div class="field full">
+        <p class="err" id="a-error" role="alert"></p>
+        <div class="inline">
+          <button class="btn primary" type="submit">Get guide</button>
+          <button class="btn" type="button" id="a-ai" disabled>Ask AI</button>
+        </div>
+        <p class="hint" id="a-status" style="margin-top:8px"></p>
+      </div>
+    </form>
+    <div id="a-result" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" id="tab-report" hidden></section>
+
+  <footer>This is a personal organiser, not medical advice. Always follow your doctor's instructions.</footer>
+</div>
+
+<div id="overlay" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
+
+<script>
+// ============================== CORE (no DOM access) ==============================
+const KEY = 'medicine-reminder-v1';
+const GRACE_MS = 3 * 60 * 60 * 1000;     // unanswered after 3h => logged "missed"
+const SNOOZE_MS = 10 * 60 * 1000;
+const DAYN = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+let storageOk = true;
+const snoozed = {};                      // "rid|due" -> epoch ms
+
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dueDate = (d, t) => { const [h, m] = t.split(':').map(Number); return new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m); };
+const dueKey = (d, t) => `${ymd(d)} ${t}`;
+const weekday = d => (d.getDay() + 6) % 7;            // Mon = 0 ... Sun = 6 (same as Python)
+const stamp = d => `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+function validDb(d) {
+  return !!d && Array.isArray(d.reminders) && Array.isArray(d.log) && Number.isInteger(d.next_id) &&
+    d.reminders.every(r => r && Number.isInteger(r.id) && ['medicine', 'health', 'appointment'].includes(r.kind) &&
+      typeof r.name === 'string' && Array.isArray(r.times) && r.times.every(t => /^\d{2}:\d{2}$/.test(t)) &&
+      typeof r.start === 'string' && typeof r.created === 'string' &&
+      (r.kind === 'appointment' ? typeof r.on === 'string' : Array.isArray(r.days)));
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) { const d = JSON.parse(raw); if (validDb(d)) return d; }
+  } catch (e) { storageOk = false; }
+  return { next_id: 1, reminders: [], log: [] };
+}
+let db = load();
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { storageOk = false; }
+}
+const find = id => db.reminders.find(r => r.id === id);
+
+function isScheduled(r, d, t, ignoreActive = false) {
+  if (!ignoreActive && r.active === false) return false;
+  const day = ymd(d);
+  if (day < r.start) return false;
+  if (r.end && day > r.end) return false;
+  const onDay = r.kind === 'appointment' ? day === r.on : r.days.includes(weekday(d));
+  return onDay && dueDate(d, t) >= new Date(r.created);
+}
+function logIndex() {
+  const m = new Map();
+  for (const e of db.log) m.set(e.rid + '|' + e.due, e.status);  // last entry wins
+  return m;
+}
+const isLow = r => r.stock != null && r.stock <= (r.per_dose || 1) * r.times.length * 2;   // about 2 days left
+
+function newReminder(kind, name, times, extra) {
+  const r = Object.assign({
+    id: db.next_id++, kind, name, times, days: [0, 1, 2, 3, 4, 5, 6], start: ymd(new Date()), end: null,
+    notes: '', active: true, created: stamp(new Date())
+  }, extra);
+  db.reminders.push(r);
+  save();
+  return r;
+}
+
+function record(r, due, status) {
+  db.log.push({ rid: r.id, name: r.name, due, status, at: new Date().toISOString() });
+  let warning = '';
+  if (status === 'taken' && r.kind === 'medicine' && r.stock != null) {
+    r.stock = Math.max(0, r.stock - (r.per_dose || 1));
+    if (isLow(r)) warning = `Low stock: ${r.stock} left. Time to refill ${r.name}.`;
+  }
+  save();
+  return warning;
+}
+function undoLog(r, due) {
+  for (let i = db.log.length - 1; i >= 0; i--) {
+    const e = db.log[i];
+    if (e.rid === r.id && e.due === due) {
+      db.log.splice(i, 1);
+      if (e.status === 'taken' && r.kind === 'medicine' && r.stock != null) r.stock += (r.per_dose || 1);
+      break;
+    }
+  }
+  save();
+}
+
+// Reminders that are due right now and need an answer. Old unanswered ones are logged as "missed".
+function dueNow(now) {
+  const out = [], idx = logIndex();
+  for (const r of db.reminders) {
+    for (const t of r.times) {
+      if (!isScheduled(r, now, t)) continue;
+      const due = dueDate(now, t), dk = dueKey(now, t), key = r.id + '|' + dk;
+      if (due > now || idx.has(key)) continue;
+      if (now - due > GRACE_MS) { record(r, dk, 'missed'); continue; }
+      if ((snoozed[key] || 0) > now.getTime()) continue;
+      out.push({ r, due: dk, key });
+    }
+  }
+  return out;
+}
+
+function buildReport(days, now) {
+  const idx = logIndex(), rows = [];
+  for (const r of db.reminders) {
+    if (r.kind === 'appointment') continue;
+    let due = 0, taken = 0, skipped = 0;
+    for (let i = 0; i < days; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      for (const t of r.times) {
+        if (isScheduled(r, d, t, true) && dueDate(d, t) <= now) {
+          due++;
+          const st = idx.get(r.id + '|' + dueKey(d, t));
+          if (st === 'taken') taken++; else if (st === 'skipped') skipped++;
+        }
+      }
+    }
+    if (due) rows.push({ r, due, taken, skipped, missed: due - taken - skipped, score: Math.round(taken / due * 100) });
+  }
+  return rows;
+}
+// ============================== END CORE ==============================
+
+// ------------------------------- UI helpers -------------------------------
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const KIND = { medicine: 'Medicine', health: 'Health', appointment: 'Appointment' };
+const fmtDays = days => days.length === 7 ? 'Every day' : days.map(i => DAYN[i]).join(', ');
+let tab = 'today', formTimes = [], toastTimer = null, modalOpen = false;
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 4500);
+}
+
+function modal(title, body, buttons, collect) {
+  return new Promise(resolve => {
+    modalOpen = true;
+    const ov = $('#overlay');
+    ov.hidden = false;
+    ov.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <h3>${esc(title)}</h3><div>${body}</div>
+      <div class="mbtns">${buttons.map((b, i) => `<button type="button" class="btn ${b.cls || ''}" data-i="${i}">${esc(b.label)}</button>`).join('')}</div></div>`;
+    ov.querySelectorAll('.mbtns button').forEach(btn => btn.addEventListener('click', () => {
+      const b = buttons[Number(btn.dataset.i)];
+      const data = collect ? collect(ov) : null;
+      ov.hidden = true; ov.innerHTML = ''; modalOpen = false;
+      resolve({ value: b.value, data });
+    }));
+    const first = ov.querySelector('input') || ov.querySelector('.mbtns button');
+    if (first) first.focus();
+  });
+}
+
+// ------------------------------- alerts -------------------------------
+let audioCtx = null;
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { /* audio not available */ }
+}
+function beep() {
+  try {
+    unlockAudio();
+    if (!audioCtx) return;
+    [0, 0.25, 0.5].forEach(delay => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = 880; g.gain.value = 0.15;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + delay); o.stop(audioCtx.currentTime + delay + 0.15);
+    });
+  } catch (e) { /* ignore */ }
+}
+function notify(title, body) {
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body }); } catch (e) { /* ignore */ }
+}
+function updateEnableBtn() {
+  const granted = 'Notification' in window && Notification.permission === 'granted';
+  $('#enable-btn').textContent = granted ? 'Alerts enabled' : 'Enable alerts';
+}
+
+async function showAlert(item) {
+  const { r, due, key } = item;
+  const label = r.kind === 'medicine' ? 'Taken' : 'Done';
+  const oldTitle = document.title;
+  document.title = '(!) Reminder due';
+  beep();
+  notify(`${KIND[r.kind]} reminder`, `${r.name}${r.dose ? ' - ' + r.dose : ''} (due ${due.slice(11)})`);
+  const res = await modal(`${KIND[r.kind]} reminder`,
+    `<div class="big">${esc(r.name)}</div>
+     <div class="sub">Due at ${esc(due.slice(11))}${r.dose ? ' &middot; ' + esc(r.dose) : ''}</div>
+     ${r.notes ? `<p>${esc(r.notes)}</p>` : ''}`,
+    [{ label, value: 'done', cls: 'primary' }, { label: 'Snooze 10 min', value: 'snooze' }, { label: 'Skip', value: 'skip' }]);
+  document.title = oldTitle;
+  if (res.value === 'done') { const w = record(r, due, 'taken'); toast(w || 'Logged as done.'); }
+  else if (res.value === 'skip') { record(r, due, 'skipped'); toast('Logged as skipped.'); }
+  else { snoozed[key] = Date.now() + SNOOZE_MS; toast('I will remind you again in 10 minutes.'); }
+  render();
+  tick();
+}
+function tick() {
+  if (modalOpen) return;
+  const items = dueNow(new Date());
+  if (tab !== 'add') render();
+  if (items.length) showAlert(items[0]);
+}
+
+// ------------------------------- rendering -------------------------------
+function badge(st) {
+  const cls = { taken: 'b-taken', pending: 'b-pending', missed: 'b-missed' }[st] || '';
+  const text = { taken: 'Done', skipped: 'Skipped', missed: 'Missed', pending: 'Due now', upcoming: 'Upcoming' }[st];
+  return `<span class="badge ${cls}">${text}</span>`;
+}
+
+function renderToday() {
+  const now = new Date(), idx = logIndex(), items = [];
+  for (const r of db.reminders) for (const t of r.times) if (isScheduled(r, now, t)) items.push({ r, t });
+  items.sort((a, b) => a.t.localeCompare(b.t) || a.r.id - b.r.id);
+  const head = `<h2>${esc(now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>`;
+  if (!items.length) {
+    $('#tab-today').innerHTML = head + `<div class="card empty">Nothing scheduled for today.<br><br>
+      <button class="btn primary" data-act="goto-add" type="button">Add your first reminder</button></div>`;
+    return;
+  }
+  let done = 0;
+  const rows = items.map(({ r, t }) => {
+    const dk = dueKey(now, t);
+    const st = idx.get(r.id + '|' + dk) || (dueDate(now, t) <= now ? 'pending' : 'upcoming');
+    if (st === 'taken') done++;
+    const label = r.kind === 'medicine' ? 'Taken' : 'Done';
+    const acts = (st === 'taken' || st === 'skipped')
+      ? `<button class="btn small" data-act="undo" data-rid="${r.id}" data-due="${dk}" type="button">Undo</button>`
+      : `<button class="btn small primary" data-act="done" data-rid="${r.id}" data-due="${dk}" type="button">${label}</button>
+         <button class="btn small" data-act="skip" data-rid="${r.id}" data-due="${dk}" type="button">Skip</button>`;
+    return `<div class="card row"><div class="time">${t}</div>
+      <div><div class="name">${esc(r.name)}${r.dose ? ' <span class="sub">&middot; ' + esc(r.dose) + '</span>' : ''}</div>
+      <div class="sub">${KIND[r.kind]}${r.notes ? ' &middot; ' + esc(r.notes) : ''} &middot; ${badge(st)}</div></div>
+      <div class="acts">${acts}</div></div>`;
+  }).join('');
+  $('#tab-today').innerHTML = head + `<div class="summary"><span class="sub">${done} of ${items.length} done</span></div>` + rows;
+}
+
+function renderList() {
+  const el = $('#tab-list');
+  if (!db.reminders.length) {
+    el.innerHTML = `<h2>All reminders</h2><div class="card empty">No reminders yet.</div>` + dataButtons();
+    return;
+  }
+  const cards = db.reminders.map(r => {
+    const when = r.kind === 'appointment' ? r.on : fmtDays(r.days);
+    const stock = r.stock != null ? ` &middot; Stock: ${r.stock} ${isLow(r) ? '<span class="badge b-low">Low</span>' : ''}` : '';
+    const course = r.kind !== 'appointment' && r.end ? ` &middot; until ${esc(r.end)}` : '';
+    const paused = r.active === false ? ' <span class="badge">Paused</span>' : '';
+    return `<div class="card"><div class="row" style="grid-template-columns:1fr auto">
+      <div><div class="name">${esc(r.name)}${r.dose ? ' <span class="sub">&middot; ' + esc(r.dose) + '</span>' : ''}
+        <span class="badge b-kind">${KIND[r.kind]}</span>${paused}</div>
+        <div class="sub">${esc(r.times.join(', '))} &middot; ${esc(when)}${course}${stock}</div>
+        ${r.notes ? `<div class="sub">${esc(r.notes)}</div>` : ''}</div>
+      <div class="acts">
+        <button class="btn small" data-act="toggle" data-rid="${r.id}" type="button">${r.active === false ? 'Resume' : 'Pause'}</button>
+        ${r.kind === 'medicine' ? `<button class="btn small" data-act="refill" data-rid="${r.id}" type="button">Refill</button>` : ''}
+        <button class="btn small danger" data-act="delete" data-rid="${r.id}" type="button">Delete</button>
+      </div></div></div>`;
+  }).join('');
+  el.innerHTML = `<h2>All reminders</h2>${cards}` + dataButtons();
+}
+function dataButtons() {
+  return `<h2>Backup</h2><div class="card"><p class="sub" style="margin-top:0">Save your data to a file, or load a backup (works with the Python version's reminders.json).</p>
+    <div class="acts" style="justify-content:flex-start">
+      <button class="btn" data-act="export" type="button">Export backup</button>
+      <button class="btn" data-act="import" type="button">Import backup</button></div></div>`;
+}
+
+function renderReport() {
+  const sel = $('#rep-days');
+  const days = sel ? Number(sel.value) : 7;
+  const rows = buildReport(days, new Date());
+  const body = rows.length ? `<div class="card" style="overflow-x:auto"><table>
+      <thead><tr><th>Name</th><th class="num">Due</th><th class="num">Taken</th><th class="num">Skipped</th><th class="num">Missed</th><th>Score</th></tr></thead><tbody>
+      ${rows.map(x => `<tr><td>${esc(x.r.name)}</td><td class="num">${x.due}</td><td class="num">${x.taken}</td>
+        <td class="num">${x.skipped}</td><td class="num">${x.missed}</td>
+        <td><div class="bar" title="${x.score}%"><i style="width:${x.score}%"></i></div><span class="sub">${x.score}%</span></td></tr>`).join('')}
+      </tbody></table></div>`
+    : `<div class="card empty">No doses have come due yet.</div>`;
+  const low = db.reminders.filter(isLow).map(r => `<div class="card"><span class="badge b-low">Low stock</span> ${esc(r.name)} has ${r.stock} left.</div>`).join('');
+  $('#tab-report').innerHTML = `<h2>Adherence report</h2>
+    <div class="field" style="max-width:200px;margin-bottom:12px"><label for="rep-days">Period</label>
+    <select id="rep-days">${[7, 14, 30].map(n => `<option value="${n}"${n === days ? ' selected' : ''}>Last ${n} days</option>`).join('')}</select></div>
+    ${body}${low}<p class="sub">Doses that came due while this page was closed count as not taken.</p>`;
+}
+
+function render() {
+  if (tab === 'today') renderToday();
+  else if (tab === 'list') renderList();
+  else if (tab === 'report') renderReport();
+}
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  document.querySelectorAll('.panel').forEach(s => { s.hidden = s.id !== 'tab-' + t; });
+  if (t === 'add') { syncKind(); renderChips(); } else render();
+}
+
+// ------------------------------- add form -------------------------------
+function syncKind() {
+  const kind = $('#f-kind').value;
+  document.querySelectorAll('#add-form [data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(kind); });
+  $('#time-label').textContent = kind === 'appointment' ? 'Time' : 'Times';
+}
+function renderChips() {
+  $('#chips').innerHTML = formTimes.map(t => `<span class="chip">${t}<button type="button" data-act="rm-time" data-t="${t}" aria-label="Remove ${t}">&times;</button></span>`).join('');
+}
+function resetForm() {
+  $('#f-name').value = ''; $('#f-dose').value = '1 tablet'; $('#f-on').value = '';
+  $('#f-time').value = '08:00'; $('#f-end').value = ''; $('#f-stock').value = ''; $('#f-perdose').value = '1';
+  $('#f-notes').value = ''; $('#f-start').value = ymd(new Date()); $('#f-error').textContent = '';
+  document.querySelectorAll('.f-day').forEach(c => { c.checked = true; });
+  formTimes = []; renderChips();
+}
+function submitAdd(e) {
+  e.preventDefault();
+  const err = m => { $('#f-error').textContent = m; };
+  err('');
+  const kind = $('#f-kind').value, name = $('#f-name').value.trim();
+  if (!name) return err('Please enter a name.');
+  const notes = $('#f-notes').value.trim();
+  if (kind === 'appointment') {
+    const on = $('#f-on').value, t = $('#f-time').value;
+    if (!on) return err('Please pick the appointment date.');
+    if (!t) return err('Please pick the appointment time.');
+    newReminder('appointment', name, [t], { on, start: on, end: on, notes });
+  } else {
+    if (!formTimes.length) return err('Add at least one time (use the "Add time" button).');
+    const days = [...document.querySelectorAll('.f-day')].filter(c => c.checked).map(c => Number(c.value));
+    if (!days.length) return err('Pick at least one day.');
+    const start = $('#f-start').value || ymd(new Date()), end = $('#f-end').value || null;
+    if (end && end < start) return err('End date cannot be before the start date.');
+    const extra = { days, start, end, notes };
+    if (kind === 'medicine') {
+      extra.dose = $('#f-dose').value.trim() || '1 tablet';
+      const stockRaw = $('#f-stock').value.trim();
+      if (stockRaw !== '') {
+        const s = Number(stockRaw), p = Number($('#f-perdose').value);
+        if (!Number.isInteger(s) || s < 0) return err('Stock must be a whole number, 0 or more.');
+        if (!Number.isInteger(p) || p < 1) return err('Units per dose must be a whole number, 1 or more.');
+        extra.stock = s; extra.per_dose = p;
+      }
+    }
+    newReminder(kind, name, [...formTimes].sort(), extra);
+  }
+  resetForm();
+  toast('Reminder saved.');
+  setTab('today');
+  tick();
+}
+
+// ------------------------------- actions -------------------------------
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const act = b.dataset.act, rid = Number(b.dataset.rid), due = b.dataset.due, r = rid ? find(rid) : null;
+  if (act === 'goto-add') return setTab('add');
+  if (act === 'rm-time') { formTimes = formTimes.filter(t => t !== b.dataset.t); return renderChips(); }
+  if (act === 'export') return exportData();
+  if (act === 'import') return $('#import-file').click();
+  if (!r) return;
+  if (act === 'done' || act === 'skip') {
+    const w = record(r, due, act === 'done' ? 'taken' : 'skipped');
+    if (w) toast(w);
+    render();
+  } else if (act === 'undo') { undoLog(r, due); render(); }
+  else if (act === 'toggle') { r.active = r.active === false; save(); render(); }
+  else if (act === 'delete') {
+    const res = await modal('Delete reminder?', `<p>Delete <b>${esc(r.name)}</b>? This cannot be undone.</p>`,
+      [{ label: 'Cancel', value: 'no' }, { label: 'Delete', value: 'yes', cls: 'primary' }]);
+    if (res.value === 'yes') { db.reminders = db.reminders.filter(x => x.id !== r.id); save(); render(); toast('Deleted.'); }
+  } else if (act === 'refill') {
+    const res = await modal('Refill stock', `<p>${esc(r.name)} currently has ${r.stock != null ? r.stock : 0} units. How many are you adding?</p>
+      <input id="refill-n" type="number" min="1" step="1" inputmode="numeric" value="30">`,
+      [{ label: 'Cancel', value: 'no' }, { label: 'Add', value: 'yes', cls: 'primary' }], ov => ov.querySelector('#refill-n').value);
+    if (res.value === 'yes') {
+      const n = Number(res.data);
+      if (Number.isInteger(n) && n >= 1) { r.stock = (r.stock || 0) + n; r.per_dose = r.per_dose || 1; save(); render(); toast(`${r.name} stock is now ${r.stock}.`); }
+      else toast('Enter a whole number of 1 or more.');
+    }
+  }
+});
+document.addEventListener('change', e => { if (e.target.id === 'rep-days') renderReport(); });
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'reminders.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('#import-file').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (x) { return toast('That file is not valid JSON.'); }
+  if (!validDb(data)) return toast('That file is not a reminders backup.');
+  const res = await modal('Replace current data?', `<p>This backup has ${data.reminders.length} reminder(s). It will replace everything currently saved here.</p>`,
+    [{ label: 'Cancel', value: 'no' }, { label: 'Replace', value: 'yes', cls: 'primary' }]);
+  if (res.value === 'yes') { db = data; save(); render(); toast('Backup loaded.'); }
+});
+
+$('#enable-btn').addEventListener('click', async () => {
+  unlockAudio();
+  try {
+    if ('Notification' in window) await Notification.requestPermission();
+    else toast('This browser has no notification support; in-page alerts still work.');
+  } catch (e) { /* ignore */ }
+  updateEnableBtn();
+  if ('Notification' in window && Notification.permission === 'denied') toast('Notifications are blocked in browser settings. In-page alerts still work.');
+  else toast('Sound unlocked. Keep this tab open to receive alerts.');
+});
+
+// ============================== ASSISTANT KNOWLEDGE (no DOM access) ==============================
+// General health information only. No doses are given anywhere: the product label or a pharmacist decides that.
+const FLAG_LABELS = {
+  pregnant: 'pregnancy or breastfeeding', liver: 'liver disease', kidney: 'kidney disease', ulcer: 'stomach ulcer or gastritis',
+  asthma: 'asthma', bp: 'high blood pressure or heart disease', diabetes: 'diabetes', thinner: 'blood thinners', older: 'age 65 or over'
+};
+
+// Keep identical to EMERGENCY_PATTERNS in server.py.
+const EMERGENCY_PATTERNS = [
+  "chest (pain|tightness|pressure)", "pressure in (my |the )?chest",
+  "(trouble|difficulty|hard to|struggling to|can ?not|can't|cannot) breath",
+  "shortness of breath", "not breathing",
+  "unconscious", "passed out", "fainted", "seizure", "convuls",
+  "having a (stroke|heart attack)", "face (is )?droop", "slurred speech",
+  "sudden (weakness|numbness|confusion|loss of vision|trouble speaking)",
+  "vomit(ing)? blood", "cough(ing)? (up )?blood", "blood in (my )?vomit",
+  "severe bleeding", "bleeding (a lot|heavily|won't stop)",
+  "overdos", "took too many", "poisoned",
+  "swallowed (poison|bleach|pesticide|kerosene|chemical)", "drank (poison|bleach|kerosene|pesticide)",
+  "anaphyla", "swelling (of|in) (the |my )?(face|lips|tongue|throat)",
+  "worst headache", "snake ?bite"
+];
+const EMERGENCY_RE = new RegExp(EMERGENCY_PATTERNS.join('|'), 'i');
+const SELFHARM_RE = /suicid|kill (myself|himself|herself)|end my life|want to die|self[- ]?harm|hurt myself|harm myself/i;
+function emergencyKind(text) {
+  const t = String(text).replace(/’/g, "'");
+  if (SELFHARM_RE.test(t)) return 'selfharm';
+  if (EMERGENCY_RE.test(t)) return 'medical';
+  return null;
+}
+
+// Rules used to check any suggested medicine (from the built-in guide or from the AI) against the user's profile.
+// First matching rule wins, so the topical rule comes before the NSAID rule.
+const DRUG_RULES = [
+  { key: 'topical', re: /\b(gel|topical|ointment|cream)\b/i, avoid: [], ask: ['pregnant', 'asthma', 'kidney', 'ulcer'] },
+  { key: 'nsaid', re: /ibuprofen|brufen|nurofen|advil|diclofenac|naproxen|ketoprofen|nimesulide|nsaid|aspirin/i, avoid: ['ulcer', 'kidney', 'asthma', 'bp', 'thinner', 'pregnant'], ask: ['older', 'diabetes'] },
+  { key: 'paracetamol', re: /paracetamol|acetaminophen|crocin|dolo|calpol|tylenol/i, avoid: ['liver'], ask: [] },
+  { key: 'decongestant', re: /decongestant|pseudoephedrine|phenylephrine/i, avoid: ['bp'], ask: ['older', 'pregnant', 'diabetes'] },
+  { key: 'antihistamine', re: /antihistamine|cetirizine|loratadine|fexofenadine|chlorphenamine|chlorpheniramine|levocetirizine/i, avoid: [], ask: ['liver', 'kidney', 'older', 'pregnant'] },
+  { key: 'antacid', re: /antacid|omeprazole|pantoprazole|famotidine|acid.reduc|magnesium|aluminium|aluminum|calcium carbonate/i, avoid: ['kidney'], ask: ['bp', 'pregnant', 'thinner'] },
+  { key: 'ors', re: /\bors\b|oral rehydration/i, avoid: [], ask: ['kidney', 'bp'] }
+];
+
+const stem = w => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) ? w.slice(0, -1) : w;
+const norm = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean).map(stem).join(' ') + ' ';
+
+function flagDrug(name, profile, myMeds) {
+  const flags = new Set(profile.flags || []);
+  if (profile.age === 'older') flags.add('older');
+  const lab = list => list.map(x => FLAG_LABELS[x]).join(', ');
+  const rule = DRUG_RULES.find(r => r.re.test(name));
+  const lname = String(name).toLowerCase();
+  if (profile.allergies) {
+    const words = norm(profile.allergies).trim().split(' ').filter(w => w.length > 3);
+    if (words.some(w => lname.includes(w)) || (rule && rule.re.test(profile.allergies)))
+      return { level: 'avoid', text: 'You listed an allergy that may match this medicine. Do not take it without asking a doctor or pharmacist.' };
+  }
+  if (rule && rule.key !== 'ors' && rule.key !== 'topical') {
+    const dup = (myMeds || []).find(m => rule.re.test(m));
+    if (dup) return { level: 'ask', text: `You already take "${dup}", which seems to contain the same kind of medicine. Taking two together can be harmful, so ask a pharmacist first.` };
+  }
+  if (rule) {
+    const hit = rule.avoid.filter(f => flags.has(f));
+    if (hit.length) return { level: 'avoid', text: `Not recommended for you because of: ${lab(hit)}. Ask a doctor or pharmacist for a safer option.` };
+    const askHit = rule.ask.filter(f => flags.has(f));
+    if (askHit.length) return { level: 'ask', text: `Check with a pharmacist or doctor first because of: ${lab(askHit)}.` };
+  }
+  if (profile.age === 'child' && !/\bors\b|oral rehydration|saline|honey/i.test(name))
+    return { level: 'ask', text: "Children's doses depend on age and weight. Ask a doctor or pharmacist before giving this." };
+  if (flags.has('pregnant'))
+    return { level: 'ask', text: 'Ask your doctor or pharmacist before taking any medicine during pregnancy or breastfeeding.' };
+  return null;
+}
+
+const KB = [
+  {
+    id: 'cold', name: 'Common cold', level: 'self',
+    keywords: ['cold', 'runny nose', 'blocked nose', 'stuffy nose', 'stuffed nose', 'sneezing', 'nasal congestion', 'sniffles'],
+    about: "A mild viral infection of the nose and throat. It usually clears up on its own in 7 to 10 days. Medicines only ease the symptoms, and antibiotics do not work on colds.",
+    otc: [
+      { name: 'Paracetamol (acetaminophen)', for: 'Aches, headache and fever', caution: "Many cold and flu combination products already contain paracetamol, so never take two together. The right amount depends on age and weight: follow the product label or ask a pharmacist." },
+      { name: 'Saline nasal drops or spray', for: 'Blocked or runny nose', caution: 'Safe for most people, including children. Use as the label says.' },
+      { name: 'Warm honey drink or throat lozenges', for: 'Sore throat and cough', caution: 'Never give honey to babies under 1 year. Lozenges are not for young children (choking risk).' },
+      { name: 'Nasal decongestant', for: 'Short-term relief of a very blocked nose', caution: 'Use for a few days only. Not suitable for young children.' }
+    ],
+    selfCare: ['Rest and sleep as much as you can', 'Drink plenty of warm fluids such as water, soup or herbal tea', 'Breathe steam from a hot shower (avoid bowls of boiling water, which cause burns)', 'Adults can gargle with warm salt water for a sore throat'],
+    prevention: ['Wash hands with soap for at least 20 seconds, especially after coughing or sneezing and before eating', 'Avoid touching your eyes, nose and mouth', 'Keep a distance from people who are sick, and stay home when you are sick', 'Cover coughs and sneezes with a tissue or your elbow', 'Sleep well, stay active and eat a balanced diet to support your immunity'],
+    seeDoctor: ['Symptoms last more than 10 days or get worse after starting to improve', 'Fever above 39 °C (102 °F) or fever lasting more than 3 days', 'Trouble breathing, wheezing or chest pain', 'Severe sore throat, ear pain or facial pain', 'A baby under 3 months with any fever']
+  },
+  {
+    id: 'flu', name: 'Flu (influenza)', level: 'self',
+    keywords: ['flu', 'influenza', 'body ache', 'chills', 'viral fever', 'flu like'],
+    about: "A viral infection that causes sudden fever, body aches, tiredness and cough. Most healthy people recover within a week, but flu can be serious for older adults, pregnant women, young children and people with long-term illness.",
+    warnings: ['Never give aspirin to children or teenagers with flu or fever. It can cause a rare but serious condition called Reye\'s syndrome.'],
+    otc: [
+      { name: 'Paracetamol (acetaminophen)', for: 'Fever and body aches', caution: "Do not combine with flu or cold products that already contain paracetamol. Follow the label or ask a pharmacist for the right amount." },
+      { name: 'Oral rehydration salts (ORS)', for: 'Replacing fluids when you are sweating a lot or not drinking enough', caution: 'Mix exactly as the packet says, using safe water.' }
+    ],
+    selfCare: ['Rest at home and avoid going to work or school until the fever is gone', 'Drink plenty of fluids', 'Eat light, easy foods when you feel able to', 'Keep the room well ventilated'],
+    prevention: ['Get a yearly flu vaccine, especially if you are 65 or over, pregnant, or have a long-term illness (ask your doctor)', 'Wash hands often with soap and water', 'Wear a well-fitting mask in crowded or poorly ventilated places during flu season', 'Cover coughs and sneezes, and do not share cups or towels', 'Stay home when you are sick so you do not spread it'],
+    seeDoctor: ['You are in a higher-risk group (65 or over, pregnant, a young child, or you have asthma, diabetes, heart, kidney or lung disease). See a doctor early: prescription antiviral medicine works best when started within the first 2 days', 'Trouble breathing, chest pain, confusion or severe weakness', 'Fever that lasts more than 3 days or comes back after improving', 'You cannot keep fluids down']
+  },
+  {
+    id: 'fever', name: 'Fever', level: 'self',
+    keywords: ['fever', 'temperature', 'high temperature', 'feverish', 'hot body'],
+    about: "A temperature of 38 °C (100.4 °F) or higher is a fever. It is a sign that the body is fighting an infection. The cause matters more than the number, so look at how the person is behaving and for other symptoms.",
+    warnings: ['If you live in or recently travelled to an area with dengue or malaria, do not take ibuprofen, aspirin or similar painkillers until a doctor has checked you.', 'Never give aspirin to children or teenagers.'],
+    otc: [
+      { name: 'Paracetamol (acetaminophen)', for: 'Bringing down fever and easing aches', caution: "The right amount depends on age and weight, so follow the product label or ask a pharmacist. Do not take other products that contain paracetamol at the same time." },
+      { name: 'Ibuprofen', for: 'Fever and aches in adults when paracetamol is not enough', caution: 'Take with food. Not for people with stomach ulcers, kidney problems or asthma triggered by painkillers, and not if dengue is possible.' },
+      { name: 'Oral rehydration salts (ORS)', for: 'Replacing fluids lost through sweating', caution: 'Mix exactly as the packet says, using safe water.' }
+    ],
+    selfCare: ['Drink plenty of fluids (water, ORS, soup, coconut water)', 'Rest and wear light clothing', 'Keep the room comfortably cool; a lukewarm sponge bath can help, cold water or ice should be avoided', 'Check the temperature again after a few hours and note how it changes'],
+    prevention: ['Wash hands regularly and avoid close contact with sick people', 'Keep vaccinations up to date, including the yearly flu vaccine', 'Prevent mosquito bites with repellent, nets or screens, and long sleeves', 'Drink safe (boiled or filtered) water and eat freshly cooked food', 'Do not leave water standing in containers, coolers or pots where mosquitoes breed'],
+    seeDoctor: ['Fever lasts more than 3 days', 'Temperature above 39.5 °C (103 °F)', 'A baby under 3 months with any fever: see a doctor immediately', 'Rash, stiff neck, severe headache, confusion, fits or trouble breathing', 'Pain when passing urine, or fever after travel or mosquito bites', 'Very drowsy, not drinking, or no urine for 8 hours']
+  },
+  {
+    id: 'headache', name: 'Headache', level: 'self',
+    keywords: ['headache', 'head ache', 'head pain', 'migraine', 'pain in head'],
+    about: "Most headaches are tension headaches, linked to stress, poor sleep, dehydration, long screen time or skipped meals. They are usually harmless and pass within hours.",
+    otc: [
+      { name: 'Paracetamol (acetaminophen)', for: 'Mild to moderate headache', caution: "Follow the label or ask a pharmacist for the right amount. Do not combine with other paracetamol-containing products." },
+      { name: 'Ibuprofen', for: 'Tension headache in adults', caution: 'Take with food. Not for people with stomach ulcers, kidney problems, or asthma triggered by painkillers.' }
+    ],
+    selfCare: ['Drink a glass or two of water', 'Rest in a quiet, dark room', 'Eat something if you skipped a meal', 'Take a break from screens and stretch your neck and shoulders', 'A cool cloth on the forehead or a warm cloth on the neck can help'],
+    prevention: ['Sleep and wake at regular times', 'Drink water through the day and do not skip meals', 'Limit caffeine and avoid too much screen time without breaks', 'Manage stress with exercise, walks, or relaxation', 'Do not use painkillers on more than 2 to 3 days a week: overuse can cause rebound headaches'],
+    seeDoctor: ['A sudden, very severe headache ("worst ever")', 'A headache after a head injury', 'Headache with fever and stiff neck, rash, confusion or fits', 'Weakness, numbness, vision changes or trouble speaking', 'New headaches after age 50, or headaches that keep getting worse', 'You need painkillers more than 2 to 3 days a week']
+  },
+  {
+    id: 'cough', name: 'Cough', level: 'self',
+    keywords: ['cough', 'coughing', 'dry cough', 'wet cough', 'phlegm', 'mucus', 'chesty'],
+    about: "A cough is the body's way of clearing the airways. Most coughs come from colds or throat irritation and settle within about 3 weeks.",
+    otc: [
+      { name: 'Warm water with honey (and lemon)', for: 'Soothing a dry or irritating cough', caution: 'Not for babies under 1 year.' },
+      { name: 'Throat lozenges', for: 'Dry, tickly cough', caution: 'Not for young children (choking risk).' },
+      { name: 'Cough syrup (ask a pharmacist whether you need one for a dry or a chesty cough)', for: 'Short-term relief', caution: 'Do not give cough and cold medicines to young children. Do not use a cough suppressant for a chesty cough with phlegm.' }
+    ],
+    selfCare: ['Drink plenty of warm fluids', 'Raise your head with an extra pillow at night', 'Avoid smoke, dust and strong smells', 'Use a humidifier or sit in a steamy bathroom (do not use bowls of boiling water)'],
+    prevention: ['Do not smoke and avoid second-hand smoke', 'On days with heavy air pollution, stay indoors when you can and wear a well-fitting N95 or FFP2 mask outdoors', 'Wash hands often and keep vaccinations (flu and others) up to date', 'Keep your home dust-free and well ventilated', 'See a doctor about any cough that keeps coming back'],
+    seeDoctor: ['Cough lasts more than 3 weeks', 'Coughing up blood, or thick yellow-green phlegm with fever', 'Breathlessness, wheezing or chest pain', 'Fever lasting more than 3 days', 'Weight loss or night sweats (tuberculosis must be ruled out)', 'A child with fast or noisy breathing']
+  },
+  {
+    id: 'sorethroat', name: 'Sore throat', level: 'self',
+    keywords: ['sore throat', 'throat pain', 'throat infection', 'pain in throat', 'tonsil', 'scratchy throat'],
+    about: "Most sore throats are caused by viruses and get better within about a week. Antibiotics only help for a bacterial infection, which a doctor has to confirm.",
+    otc: [
+      { name: 'Paracetamol (acetaminophen)', for: 'Throat pain and fever', caution: "Follow the label or ask a pharmacist for the right amount. Avoid other paracetamol-containing products at the same time." },
+      { name: 'Throat lozenges or warm honey drink', for: 'Soothing the throat', caution: 'Never give honey to babies under 1 year. Lozenges are not for young children.' }
+    ],
+    selfCare: ['Gargle with warm salt water (adults and older children)', 'Drink warm fluids and rest your voice', 'Eat soft foods and avoid very spicy or hot food', 'Avoid smoking and smoky places'],
+    prevention: ['Wash hands often and avoid sharing cups or utensils', 'Avoid very cold drinks if they trigger your throat', 'Do not smoke and avoid air pollution when you can', 'Stay home while you have a fever'],
+    seeDoctor: ['Difficulty swallowing, drooling or trouble breathing', 'Fever above 39 °C or fever lasting more than 3 days', 'Symptoms last more than a week', 'White patches on the tonsils, or a rash', 'Repeated sore throats']
+  },
+  {
+    id: 'acidity', name: 'Acidity and heartburn', level: 'self',
+    keywords: ['acidity', 'heartburn', 'acid reflux', 'reflux', 'indigestion', 'gastric', 'gas', 'gastritis', 'bloating', 'sour taste', 'burning stomach'],
+    about: "Stomach acid moving up into the food pipe causes a burning feeling in the chest or throat, a sour taste and bloating. It is common and often linked to meal size, timing and food choices.",
+    warnings: ['Chest pain can be a heart problem and not acidity. If the pain is severe, spreads to the arm or jaw, or comes with sweating or breathlessness, get emergency help.'],
+    otc: [
+      { name: 'Antacid tablets or liquid', for: 'Quick, short-term relief of heartburn', caution: 'Antacids can affect how other medicines are absorbed, so ask a pharmacist how to space them. Do not rely on them every day.' },
+      { name: 'Acid-reducing medicines (only on a pharmacist\'s advice)', for: 'Frequent heartburn', caution: 'Meant for short courses. See a doctor if you need them for more than 2 weeks.' }
+    ],
+    selfCare: ['Eat smaller meals and eat slowly', 'Do not lie down for 2 to 3 hours after eating', 'Raise the head of your bed a little', 'Cut down on spicy, oily and fried food, carbonated drinks, and tea or coffee on an empty stomach'],
+    prevention: ['Keep to a healthy weight', 'Finish dinner 2 to 3 hours before bed', 'Eat at regular times and do not skip meals', 'Avoid smoking and limit alcohol', 'Manage stress, and avoid regular use of painkillers on an empty stomach'],
+    seeDoctor: ['Pain or difficulty when swallowing', 'Vomiting blood, or black, tarry stools', 'Unplanned weight loss or repeated vomiting', 'You need antacids most days for more than 2 weeks', 'New symptoms after age 45 to 50']
+  },
+  {
+    id: 'diarrhoea', name: 'Diarrhoea (loose motions)', level: 'self',
+    keywords: ['diarrhoea', 'diarrhea', 'loose motion', 'loose stool', 'watery stool', 'stomach upset', 'food poisoning', 'gastroenteritis', 'stomach flu'],
+    about: "Loose, watery stools are usually caused by an infection from food or water and often settle in a few days. The main danger is losing too much fluid and salt (dehydration), so replacing fluids is the key treatment.",
+    warnings: ['Avoid anti-diarrhoea tablets if there is blood in the stool or a fever, and do not give them to children.'],
+    otc: [
+      { name: 'Oral rehydration salts (ORS)', for: 'Replacing the water and salts you lose. This is the most important treatment', caution: 'Mix exactly as the packet says, using safe (boiled or filtered) water, and sip often.' }
+    ],
+    selfCare: ['Sip fluids often: ORS, clear soups, rice water, coconut water', 'Keep eating light foods such as rice, banana, curd and toast', 'Avoid alcohol, very oily or spicy food, and raw salads until you recover', 'Rest and wash hands well so it does not spread'],
+    prevention: ['Wash hands with soap after using the toilet and before eating or cooking', 'Drink boiled, filtered or sealed bottled water', 'Eat freshly cooked food and keep food covered and refrigerated', 'Wash fruit and vegetables, and avoid ice made from unsafe water', 'Make sure babies get the rotavirus vaccine on schedule, and ask a doctor about the typhoid vaccine'],
+    seeDoctor: ['Blood or black stools', 'Fever above 39 °C', 'Signs of dehydration: very dry mouth, dizziness, sunken eyes, or little or no urine for 8 hours', 'Diarrhoea for more than 2 days (sooner for babies, older adults and pregnant women)', 'Severe stomach pain, or vomiting so much that you cannot keep fluids down']
+  },
+  {
+    id: 'constipation', name: 'Constipation', level: 'self',
+    keywords: ['constipation', 'hard stool', 'cannot pass stool', 'not passing stool', 'straining', 'difficulty passing stool'],
+    about: "Passing hard, dry stools less often than usual. It is usually caused by too little fibre or water, low activity, or ignoring the urge to go.",
+    otc: [
+      { name: 'Fibre supplement (for example psyllium / ispaghula husk)', for: 'Softer, easier-to-pass stools', caution: 'Take with plenty of water and start slowly. It can take a couple of days to work.' },
+      { name: 'A gentle laxative (ask a pharmacist which kind suits you)', for: 'Short-term relief', caution: 'Avoid using strong (stimulant) laxatives for long, because the bowel can become dependent on them.' }
+    ],
+    selfCare: ['Eat more fibre: fruit, vegetables, whole grains, pulses and seeds', 'Drink water through the day', 'Walk or exercise daily', 'Go to the toilet when you feel the urge and give yourself time without straining'],
+    prevention: ['Make fibre-rich foods a daily habit', 'Drink enough water', 'Stay active', 'Keep regular toilet routines, such as after breakfast', 'Do not ignore the urge to go'],
+    seeDoctor: ['Blood in the stool', 'Severe stomach pain or a swollen, hard belly', 'Unplanned weight loss', 'New constipation after age 50, or lasting more than 3 weeks', 'Constipation that alternates with diarrhoea']
+  },
+  {
+    id: 'allergy', name: 'Allergy (sneezing, itching, hay fever)', level: 'self',
+    keywords: ['allergy', 'allergic', 'hay fever', 'itchy eyes', 'dust allergy', 'pollen', 'itching', 'hives', 'allergic rhinitis'],
+    about: "The immune system over-reacts to things like dust, pollen, pets or certain foods, causing sneezing, a runny nose, itchy eyes or skin, or hives.",
+    warnings: ['Swelling of the face, lips, tongue or throat, wheezing, or trouble breathing after a sting, food or medicine is an emergency. Call your local emergency number.'],
+    otc: [
+      { name: 'Antihistamine tablets (for example loratadine or cetirizine)', for: 'Sneezing, runny nose, itchy eyes, hives', caution: 'Some can cause drowsiness, so avoid driving until you know how they affect you, and avoid alcohol.' },
+      { name: 'Saline nasal rinse or spray', for: 'Blocked or irritated nose', caution: 'Use clean or boiled-and-cooled water for rinses.' }
+    ],
+    selfCare: ['Avoid your known triggers as far as you can', 'Shower and change clothes after being outdoors in dusty or high-pollen conditions', 'Use a clean, damp cloth for dusting instead of dry dusting', 'A cool compress can ease itchy skin or eyes'],
+    prevention: ['Wash bedding in hot water every week and keep pets out of the bedroom', 'Keep windows closed on high pollen or heavy pollution days', 'Reduce dust: damp-wipe surfaces and avoid heavy carpets and soft toys that collect dust', 'Keep a note of what sets off your symptoms', 'Get a doctor to test for allergies if symptoms keep coming back'],
+    seeDoctor: ['Wheezing, chest tightness or breathlessness', 'Symptoms most of the year or affecting your sleep or work', 'No improvement after about a week of treatment', 'A skin rash that spreads, blisters or is painful', 'Eye pain or vision changes']
+  },
+  {
+    id: 'musclepain', name: 'Muscle pain, back pain or a sprain', level: 'self',
+    keywords: ['muscle pain', 'body pain', 'back pain', 'sprain', 'strain', 'joint pain', 'sore muscle', 'neck pain', 'twisted ankle', 'backache', 'muscle ache'],
+    about: "Minor muscle pain and sprains usually come from overuse, awkward movements or poor posture and improve over a few days to a couple of weeks.",
+    otc: [
+      { name: 'Paracetamol (acetaminophen)', for: 'Pain relief', caution: "Follow the label or ask a pharmacist for the right amount. Avoid other paracetamol-containing products at the same time." },
+      { name: 'Ibuprofen', for: 'Pain and swelling in adults, for a short time only', caution: 'Take with food. Not for people with stomach ulcers, kidney problems, high blood pressure, or asthma triggered by painkillers.' },
+      { name: 'Pain-relief gel (topical)', for: 'Sore muscles and joints', caution: 'Use only on unbroken skin and wash hands afterwards. Do not use with heat pads.' }
+    ],
+    selfCare: ['Rest the area for the first day or two, then start moving gently', 'For a fresh injury, use a cold pack wrapped in cloth for 15 to 20 minutes at a time', 'Use warmth for stiff muscles without swelling', 'For sprains, use a compression bandage and raise the limb'],
+    prevention: ['Warm up and stretch before exercise', 'Build core and back strength with regular exercise', 'Keep good posture and set up your desk so the screen is at eye level', 'Take a short break to stand and stretch every 30 to 60 minutes', 'Lift heavy objects with your knees, not your back, and keep to a healthy weight'],
+    seeDoctor: ['You cannot put weight on the limb or move the joint', 'Obvious deformity, severe swelling or bruising', 'Numbness, tingling or weakness in a limb, or back pain with loss of bladder or bowel control (an emergency)', 'The pain started after a fall or accident', 'Not improving after about a week', 'Fever with joint pain or swelling']
+  },
+  {
+    id: 'dengue', name: 'Dengue', level: 'doctor',
+    keywords: ['dengue', 'platelet', 'pain behind eyes', 'breakbone', 'aedes'],
+    about: "A viral infection spread by Aedes mosquitoes, which bite during the day. It causes sudden high fever, severe headache, pain behind the eyes, and muscle and joint pain, sometimes with a rash. It must be confirmed by a doctor and needs monitoring with blood tests.",
+    warnings: ['Do not take aspirin, ibuprofen or similar painkillers for dengue fever. They raise the risk of bleeding. Use only the fever medicine your doctor approves.', 'The risky period is often when the fever drops (around day 3 to 7). Watch for warning signs even if you feel better.'],
+    otc: [],
+    selfCare: ['Rest and drink plenty of fluids (water, ORS, coconut water, soups)', 'Follow your doctor\'s advice on fever medicine and on when to repeat blood tests', 'Use a mosquito net or repellent even while sick, so you do not pass it to others'],
+    prevention: ['Stop mosquitoes breeding: empty and scrub water in coolers, flower pots, buckets and tyres at least once a week', 'Cover water storage tanks and containers', 'Use repellent and wear long sleeves, especially in the morning and late afternoon', 'Use window screens, nets and mosquito coils or vaporisers indoors', 'Keep your surroundings clean and tell your local authority about stagnant water'],
+    seeDoctor: ['Any fever with severe headache, pain behind the eyes, or body pain: see a doctor within a day', 'Go to hospital at once for: severe belly pain, repeated vomiting, bleeding from nose or gums, blood in vomit or black stools', 'Cold, clammy skin, restlessness or extreme tiredness', 'Difficulty breathing, or very little urine']
+  },
+  {
+    id: 'malaria', name: 'Malaria', level: 'doctor',
+    keywords: ['malaria', 'chills and shivering', 'shivering fever', 'fever with chills', 'anopheles'],
+    about: "A parasite infection spread by Anopheles mosquito bites. It causes fever with chills and sweating, headache and body aches, and the fever can come in cycles. It needs a blood test and prescription medicine, so do not treat it yourself.",
+    otc: [],
+    selfCare: ['See a doctor for a blood test the same day if you have fever with chills', 'Drink plenty of fluids and rest', 'Complete any medicine course exactly as the doctor prescribes'],
+    prevention: ['Sleep under an insecticide-treated mosquito net', 'Use repellent and wear long sleeves and trousers at dusk and dawn', 'Remove standing water around the home', 'Before travelling to a high-risk area, ask a doctor about preventive tablets', 'Use window screens or room vaporisers where mosquitoes are common'],
+    seeDoctor: ['Any fever with chills, in or after being in a malaria area: get a blood test the same day', 'Confusion, fits, yellow skin, very dark urine, severe weakness or trouble breathing: go to hospital immediately']
+  },
+  {
+    id: 'typhoid', name: 'Typhoid (enteric fever)', level: 'doctor',
+    keywords: ['typhoid', 'enteric fever', 'step ladder fever', 'prolonged fever'],
+    about: "A bacterial infection from contaminated food or water. Fever builds up over several days, with headache, weakness, stomach pain, and sometimes constipation or diarrhoea. It needs a blood test and prescription antibiotics, so do not self-treat.",
+    otc: [],
+    selfCare: ['See a doctor if fever lasts more than 3 days', 'Drink plenty of safe fluids and rest', 'Wash hands carefully and do not prepare food for others while sick'],
+    prevention: ['Ask your doctor about the typhoid vaccine', 'Drink boiled, filtered or sealed bottled water', 'Eat freshly cooked food and avoid raw salads and ice from unsafe water', 'Wash hands with soap before eating and after using the toilet', 'Wash fruit and vegetables well'],
+    seeDoctor: ['Fever lasting more than 3 days: see a doctor within a day or two', 'Severe stomach pain, black stools or vomiting blood', 'Confusion, extreme weakness or trouble breathing: go to hospital immediately']
+  },
+  {
+    id: 'diabetes', name: 'Diabetes (high blood sugar)', level: 'doctor',
+    keywords: ['diabetes', 'sugar', 'high sugar', 'blood sugar', 'frequent urination', 'excessive thirst', 'diabetic', 'prediabetes'],
+    about: "A long-term condition where blood sugar stays too high. It must be diagnosed with blood tests and managed by a doctor. Never start, stop or change diabetes medicines on your own, and do not use \"natural cures\" instead of treatment.",
+    otc: [],
+    selfCare: ['Take medicines exactly as your doctor prescribes and keep follow-up appointments', 'Eat regular, balanced meals with more vegetables, pulses and whole grains', 'Check your feet daily and see a doctor about any wound that is slow to heal', 'Keep a record of your sugar readings if your doctor asks you to'],
+    prevention: ['Keep to a healthy weight', 'Be active: aim for about 150 minutes of brisk activity a week', 'Eat more fibre and whole grains, and cut down sugary drinks, sweets and refined carbohydrates', 'Do not smoke', 'Ask your doctor when to get tested, especially if you are overweight, have a family history of diabetes, or are over 30 to 35'],
+    seeDoctor: ['Increased thirst and urination, tiredness, blurred vision, slow-healing wounds or unexplained weight loss: get a blood sugar test', 'Go to hospital at once for: confusion, fainting, fruity-smelling breath, or repeated vomiting']
+  },
+  {
+    id: 'bp', name: 'High blood pressure', level: 'doctor',
+    keywords: ['blood pressure', 'high bp', 'hypertension', 'bp', 'high blood pressure'],
+    about: "Long-term high blood pressure often has no symptoms but raises the risk of heart attack, stroke and kidney disease. It has to be confirmed by repeated readings from a health professional, and treatment medicines are prescription-only.",
+    otc: [],
+    selfCare: ['Take your prescribed medicines every day and do not stop when you feel well', 'Measure your blood pressure at the same time each day if your doctor advises it', 'Reduce salt, pickles, papad and packaged snacks'],
+    prevention: ['Cut salt (aim for less than about 5 g, or one teaspoon, a day in total)', 'Eat plenty of fruit, vegetables and whole grains', 'Be active for about 150 minutes a week and keep to a healthy weight', 'Avoid tobacco and limit alcohol', 'Get your blood pressure checked regularly, at least once a year after age 30'],
+    seeDoctor: ['Home readings of 140/90 or higher on repeated checks', 'Go to hospital at once for: severe headache, chest pain, breathlessness, vision changes, weakness or trouble speaking with a high reading']
+  },
+  {
+    id: 'asthma', name: 'Asthma and wheezing', level: 'doctor',
+    keywords: ['asthma', 'wheeze', 'wheezing', 'breathless', 'whistling breathing', 'tight chest'],
+    about: "A long-term condition where the airways become inflamed and narrow, causing wheeze, cough, chest tightness and breathlessness. Inhalers are prescription medicines, and the right type and technique matter, so this app does not suggest medicines for it.",
+    otc: [],
+    selfCare: ['Use the inhalers and action plan your doctor gave you', 'Keep your reliever inhaler with you', 'Learn the correct inhaler technique from your doctor or pharmacist'],
+    prevention: ['Avoid triggers: smoke, dust, strong smells, cold air and heavy pollution', 'Keep bedding clean and wash it in hot water every week', 'Get the yearly flu vaccine if your doctor advises it', 'Wear a well-fitting N95 or FFP2 mask outdoors on high-pollution days', 'Do not stop preventer medicine without asking your doctor'],
+    seeDoctor: ['Wheezing or cough that keeps coming back or wakes you at night', 'You need your reliever inhaler more often than usual', 'Go to hospital at once for: severe breathlessness, trouble speaking full sentences, or blue lips']
+  }
+];
+
+function matchConditions(query, limit = 3) {
+  const q = norm(query), scored = [];
+  for (const e of KB) {
+    let score = 0;
+    for (const k of e.keywords) if (q.includes(norm(k))) score += k.trim().split(/\s+/).length;
+    if (score) scored.push({ e, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(x => x.e);
+}
+
+function buildGuideResult(e, profile, myMeds) {
+  const noMeds = e.level === 'doctor' || profile.age === 'infant';
+  const otc = noMeds ? [] : e.otc.map(o => ({ name: o.name, used_for: o.for, cautions: o.caution, flag: flagDrug(o.name, profile, myMeds) }));
+  const notes = [];
+  if (profile.age === 'infant') notes.push('For babies under 1 year, do not give any medicine without a doctor\'s advice, even if it is sold over the counter.');
+  if (e.level === 'doctor') notes.push('This condition needs a doctor\'s diagnosis and treatment, so this app does not suggest medicines for it.');
+  return { title: e.name, level: e.level, summary: e.about, warnings: e.warnings || [], otc, selfCare: e.selfCare, prevention: e.prevention, seeDoctor: e.seeDoctor, notes, source: 'guide' };
+}
+
+function fromAi(data, profile, myMeds) {
+  const level = { self_care: 'self', see_doctor: 'doctor', emergency: 'emergency' }[data.category] || 'doctor';
+  const noMeds = level !== 'self' || profile.age === 'infant';
+  const otc = noMeds ? [] : (data.otc_options || []).map(o => ({ name: o.name, used_for: o.used_for, cautions: o.cautions, flag: flagDrug(o.name, profile, myMeds) }));
+  const notes = [];
+  if (data.note) notes.push(data.note);
+  if (profile.age === 'infant') notes.push('For babies under 1 year, do not give any medicine without a doctor\'s advice, even if it is sold over the counter.');
+  if (level === 'doctor') notes.push('This needs a doctor\'s assessment, so no medicines are suggested here.');
+  return { title: data.title || 'Health information', level, summary: data.summary || '', warnings: [], otc, selfCare: data.self_care || [], prevention: data.prevention || [], seeDoctor: data.see_doctor_if || [], notes, source: 'ai' };
+}
+// ============================== END ASSISTANT KNOWLEDGE ==============================
+
+// ------------------------------- assistant UI -------------------------------
+let aiReady = false, lastHits = [];
+const profileNow = () => ({
+  age: $('#a-age').value,
+  flags: [...document.querySelectorAll('.a-flag:checked')].map(c => c.value),
+  allergies: $('#a-allergy').value.trim(),
+  useMeds: $('#a-meds').checked
+});
+const medNames = p => p.useMeds ? db.reminders.filter(r => r.kind === 'medicine').map(r => r.name) : [];
+const setResult = html => { $('#a-result').innerHTML = html; };
+
+function emergencyHtml(kind) {
+  if (kind === 'selfharm') {
+    return `<div class="emergency" role="alert"><h3>You deserve support right now</h3>
+      <p>I'm really sorry you are going through this. Please reach out to someone now: call your local emergency number (112 in India), or a crisis helpline (in India, Tele-MANAS 14416), or go to the nearest hospital. Tell someone you trust how you feel, and stay with another person if you can.</p>
+      <p>If you have taken any medicine or tablets to hurt yourself, get emergency help immediately.</p></div>`;
+  }
+  return `<div class="emergency" role="alert"><h3>This may be an emergency</h3>
+    <p><b>Call your local emergency number now (112 in India)</b> or go to the nearest emergency department. Do not wait for an app, and do not drive yourself if you feel unwell.</p>
+    <p>No medicine suggestions are shown for symptoms like these.</p></div>`;
+}
+
+function adviceHtml(res) {
+  const ul = items => items && items.length ? `<ul>${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : '';
+  const sec = (title, items) => items && items.length ? `<div class="sec"><h4>${title}</h4>${ul(items)}</div>` : '';
+  const badgeText = res.source === 'ai' ? 'AI answer' : 'Built-in guide';
+  let h = `<div class="card"><div class="name">${esc(res.title)} <span class="badge b-kind">${badgeText}</span>${res.level === 'doctor' ? ' <span class="badge b-pending">Needs a doctor</span>' : ''}</div>
+    <p>${esc(res.summary)}</p>`;
+  for (const w of res.warnings || []) h += `<div class="callout bad"><b>Important:</b> ${esc(w)}</div>`;
+  for (const n of res.notes || []) h += `<div class="callout warn">${esc(n)}</div>`;
+  if (res.otc.length) {
+    h += `<div class="sec"><h4>Over-the-counter options to ask a pharmacist about</h4>
+      <p class="sub" style="margin:0 0 6px">No amounts are given here: the product label or your pharmacist decides the right amount for you.</p>
+      ${res.otc.map(o => `<div class="otc ${o.flag ? o.flag.level : ''}"><div class="name">${esc(o.name)}</div>
+        ${o.used_for ? `<div class="sub">Used for: ${esc(o.used_for)}</div>` : ''}
+        ${o.cautions ? `<div class="sub">${esc(o.cautions)}</div>` : ''}
+        ${o.flag ? `<div class="flag ${o.flag.level}">${o.flag.level === 'avoid' ? 'Not for you: ' : 'Check first: '}${esc(o.flag.text)}</div>` : ''}</div>`).join('')}</div>`;
+  } else if (res.level === 'self') {
+    h += `<div class="callout">No medicine options are listed for this profile. A doctor or pharmacist can suggest what is safe for you.</div>`;
+  }
+  h += sec('Self-care at home', res.selfCare) + sec('How to prevent it', res.prevention) + sec('See a doctor if', res.seeDoctor);
+  h += `<p class="sub" style="margin-top:14px">${res.source === 'ai' ? 'AI answers can be wrong. ' : ''}This is general information, not a diagnosis. Check with a doctor or pharmacist before taking any medicine.</p></div>`;
+  return h;
+}
+function relatedHtml(hits, currentId) {
+  const others = hits.filter(e => e.id !== currentId);
+  if (!others.length) return '';
+  return `<p class="sub">Other matching topics:</p><div class="chips">${others.map(e => `<button type="button" class="btn small" data-guide="${e.id}">${esc(e.name)}</button>`).join('')}</div>`;
+}
+function showGuide(id) {
+  const e = KB.find(x => x.id === id);
+  if (!e) return;
+  const p = profileNow();
+  setResult(adviceHtml(buildGuideResult(e, p, medNames(p))) + relatedHtml(lastHits, id));
+}
+function checkQuery() {
+  const q = $('#a-query').value.trim();
+  $('#a-error').textContent = '';
+  if (q.length < 3) { $('#a-error').textContent = 'Please describe the problem or disease (at least 3 letters).'; return null; }
+  const kind = emergencyKind(q);
+  if (kind) { setResult(emergencyHtml(kind)); return null; }
+  return q;
+}
+function runGuide() {
+  const q = checkQuery();
+  if (!q) return;
+  lastHits = matchConditions(q);
+  if (!lastHits.length) {
+    setResult(`<div class="card"><p>I could not match that to a topic in the built-in guide. Try different words, or pick a topic above${aiReady ? ', or use Ask AI' : ''}.</p>
+      <p class="sub">If you are worried about your symptoms, talk to a doctor or pharmacist.</p></div>`);
+    return;
+  }
+  showGuide(lastHits[0].id);
+}
+async function runAI() {
+  const q = checkQuery();
+  if (!q) return;
+  const p = profileNow(), meds = medNames(p), btn = $('#a-ai');
+  btn.disabled = true; btn.textContent = 'Thinking...';
+  setResult('<div class="card empty">Asking the AI...</div>');
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 70000);
+    const r = await fetch('/api/advice', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl.signal,
+      body: JSON.stringify({ query: q, age_group: p.age, flags: p.flags, allergies: p.allergies, medicines: meds })
+    });
+    clearTimeout(timer);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `Server error (${r.status})`);
+    if (data.category === 'emergency') { setResult(emergencyHtml(data.emergency_kind || 'medical')); return; }
+    lastHits = [];
+    setResult(adviceHtml(fromAi(data, p, meds)));
+  } catch (e) {
+    const hits = matchConditions(q);
+    lastHits = hits;
+    const why = e.name === 'AbortError' ? 'the request took too long' : e.message;
+    const msg = `<div class="callout warn">AI answer unavailable: ${esc(why)}. ${hits.length ? 'Showing the built-in guide instead.' : 'Try the built-in guide with different words.'}</div>`;
+    setResult(hits.length ? msg + adviceHtml(buildGuideResult(hits[0], p, meds)) + relatedHtml(hits, hits[0].id) : msg);
+  } finally {
+    btn.disabled = !aiReady; btn.textContent = 'Ask AI';
+  }
+}
+async function detectAI() {
+  const st = $('#a-status'), btn = $('#a-ai');
+  btn.disabled = true; aiReady = false;
+  if (!/^https?:$/.test(location.protocol)) {
+    st.textContent = 'AI mode needs the local server: run "python server.py" and open http://localhost:8000. The built-in guide works without it.';
+    return;
+  }
+  try {
+    const r = await fetch('/api/status', { cache: 'no-store' });
+    const d = await r.json();
+    aiReady = !!d.ai;
+    st.textContent = aiReady
+      ? 'AI mode is ready. Your question (and medicine names only if ticked above) is sent to the Claude API through your local server.'
+      : 'The server is running but has no API key. Set ANTHROPIC_API_KEY and restart server.py to use AI mode. The built-in guide works without it.';
+  } catch (e) {
+    st.textContent = 'AI mode is not available here (the local server was not found). The built-in guide works without it.';
+  }
+  btn.disabled = !aiReady;
+}
+function initAssistant() {
+  $('#a-quick').innerHTML = KB.map(e => `<button type="button" class="btn small" data-quick="${e.id}">${esc(e.name)}</button>`).join('');
+  $('#a-quick').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-quick]');
+    if (!b) return;
+    const e = KB.find(x => x.id === b.dataset.quick);
+    $('#a-query').value = e.name; $('#a-error').textContent = '';
+    lastHits = [e];
+    showGuide(e.id);
+  });
+  $('#a-result').addEventListener('click', ev => { const b = ev.target.closest('[data-guide]'); if (b) showGuide(b.dataset.guide); });
+  $('#assist-form').addEventListener('submit', ev => { ev.preventDefault(); runGuide(); });
+  $('#a-ai').addEventListener('click', runAI);
+  detectAI();
+}
+
+// ------------------------------- start up -------------------------------
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+$('#f-days').innerHTML = DAYN.map((n, i) => `<label><input type="checkbox" class="f-day" value="${i}" checked> ${n}</label>`).join('');
+$('#f-kind').addEventListener('change', syncKind);
+$('#add-time').addEventListener('click', () => {
+  const t = $('#f-time').value;
+  if (!t) return;
+  if (!formTimes.includes(t)) formTimes.push(t);
+  formTimes.sort(); renderChips();
+});
+$('#add-form').addEventListener('submit', submitAdd);
+$('#f-start').value = ymd(new Date());
+function clock() { $('#clock').textContent = new Date().toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+clock(); setInterval(clock, 1000);
+updateEnableBtn();
+initAssistant();
+setTab('today');
+tick();
+setInterval(tick, 15000);
+if (!storageOk) toast('Browser storage is unavailable, so changes will not be kept after you close this page.');
+</script>
+</body>
+</html>
